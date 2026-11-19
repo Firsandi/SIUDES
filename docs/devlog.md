@@ -1,3 +1,5 @@
 # SIUDES Development Log (V-Model Progress)
 
 - **2026-11-19 (Setup & Governance):** Menetapkan metodologi V-Model (4 fase hingga 10 Des 2026), membuat 11 GitHub Issues & Gantt Chart Roadmap, mengunci kontrak arsitektur terdistribusi di .agents/rules/siudes-architecture.md, serta menyusun TEAM-GUITE.md dan template PR.
+
+- **2026-11-19 (Tiket #1 / M1-01 - Infrastruktur Docker & Reverse Proxy):** Menyiapkan `postgres/init.sql` (`db_siudes_unit`, `db_siudes_finance`), `nginx/default.conf` (routing `/api/unit/`, `/api/finance/` dengan `proxy_buffering off` untuk SSE, dan `/`), `docker-compose.yml` pada network `siudes-net` (postgres, rabbitmq, unit-service dengan `pdo_pgsql` & `sockets`, finance-service, billing-worker, frontend, nginx), kerangka minimal `/health` dan Vite Vue 3, `.env.example`, serta `.gitignore`. Port host PostgreSQL dipetakan ke `5433` dan Nginx ke `8081` (`NGINX_PORT`) karena port `5432` dan `8080` sudah terpakai di host lokal; seluruh layanan diverifikasi `Up`/`Healthy` dan endpoint `/health` merespons `200 OK`.

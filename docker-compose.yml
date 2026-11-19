@@ -1,0 +1,147 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: siudes-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-siudes}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-siudes123}
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-siudes} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - siudes-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: siudes-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-siudes}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-siudes123}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - siudes-net
+
+  unit-service:
+    build:
+      context: ./unit-service
+      dockerfile: Dockerfile
+    container_name: siudes-unit-service
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: db_siudes_unit
+      DB_USERNAME: ${POSTGRES_USER:-siudes}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-siudes123}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-siudes}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-siudes123}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./unit-service:/var/www/html
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - siudes-net
+
+  finance-service:
+    build:
+      context: ./finance-service
+      dockerfile: Dockerfile
+    container_name: siudes-finance-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-siudes}:${POSTGRES_PASSWORD:-siudes123}@postgres:5432/db_siudes_finance
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-siudes}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-siudes123}
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./finance-service:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - siudes-net
+
+  billing-worker:
+    build:
+      context: ./finance-service
+      dockerfile: Dockerfile
+    container_name: siudes-billing-worker
+    command: ["python", "-m", "app.worker"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-siudes}:${POSTGRES_PASSWORD:-siudes123}@postgres:5432/db_siudes_finance
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-siudes}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-siudes123}
+    volumes:
+      - ./finance-service:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - siudes-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: siudes-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - siudes-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: siudes-nginx
+    ports:
+      - "${NGINX_PORT:-8081}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - unit-service
+      - finance-service
+      - frontend
+    networks:
+      - siudes-net
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+
+networks:
+  siudes-net:
+    driver: bridge
