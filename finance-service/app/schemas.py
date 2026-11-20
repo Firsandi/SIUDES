@@ -1,9 +1,9 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 T = TypeVar("T")
 
@@ -44,3 +44,14 @@ class SummaryOut(BaseModel):
     total_revenue: Decimal
     total_unpaid: Decimal
     by_unit: dict[str, UnitSummaryOut]
+
+
+class UsageRecordedEvent(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    event_id: uuid.UUID
+    unit_type: Literal["AIR", "SAMPAH", "ALSINTAN"]
+    customer_code: str = Field(min_length=1, max_length=64)
+    usage_amount: Decimal = Field(gt=Decimal("0"))
+    tariff_rate: Decimal = Field(ge=Decimal("0"))
+    recorded_at: datetime
