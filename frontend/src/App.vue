@@ -1,10 +1,12 @@
 <script setup>
-const appName = 'SIUDES (Sistem Informasi Unit Usaha Desa)'
+import { useNavigation } from './composables/useNavigation'
+import LandingView from './views/LandingView.vue'
+import WorkspaceView from './views/WorkspaceView.vue'
+
+const { currentRoute } = useNavigation()
 </script>
 
 <template>
-  <main style="font-family: system-ui, sans-serif; padding: 2rem; max-width: 720px; margin: 0 auto;">
-    <h1>{{ appName }}</h1>
-    <p>Frontend Vite + Vue 3 berjalan di port 5173.</p>
-  </main>
+  <LandingView v-if="currentRoute === 'landing'" />
+  <WorkspaceView v-else />
 </template>
