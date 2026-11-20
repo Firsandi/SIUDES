@@ -5,16 +5,35 @@ import { useNavigation } from '../composables/useNavigation'
 const { goToWorkspace } = useNavigation()
 
 const rootRef = ref(null)
-const contoursRef = ref(null)
 const email = ref('')
 const emailSent = ref(false)
 
-// Equalizer bars (16 bars with randomized heights and durations)
-const eqBars = Array.from({ length: 16 }, () => ({
-  h: `${(35 + Math.random() * 55).toFixed(1)}%`,
-  t: `${(0.7 + Math.random() * 1.1).toFixed(2)}s`,
-  delay: `${(-Math.random() * 1.5).toFixed(2)}s`,
-}))
+// 3 Real Wikimedia Commons landmarks of Kabupaten Jember
+const jemberSlides = [
+  {
+    id: 'argopuro',
+    label: 'Argopuro',
+    caption: 'Pegunungan Argopuro · Hulu Air Bersih Jember',
+    src: '/images/argopuro-jember.jpg',
+    alt: 'Bentang Alam Taman Hidup, Pegunungan Argopuro Jember',
+  },
+  {
+    id: 'tembakau',
+    label: 'Tembakau',
+    caption: 'Warisan Tembakau · Agraris Kabupaten Jember',
+    src: '/images/tembakau-jember.jpg',
+    alt: 'Warisan Pengolahan Tembakau Kabupaten Jember',
+  },
+  {
+    id: 'papuma',
+    label: 'Papuma',
+    caption: 'Pantai Papuma · Pesisir Selatan Jember',
+    src: '/images/papuma-jember.jpg',
+    alt: 'Pantai Papuma, Kabupaten Jember',
+  },
+]
+const activeSlideIdx = ref(0)
+const activeSlide = computed(() => jemberSlides[activeSlideIdx.value])
 
 // Ticker events aligned with docs/contract.md (PLG-001..PLG-005, m³, bulan, jam)
 const tickerEvents = [
@@ -46,6 +65,7 @@ const marqueeItems = [...invoiceSamples, ...invoiceSamples]
 
 let tickerTimer = null
 let tickerFadeTimer = null
+let slideTimer = null
 let revealObserver = null
 let bgObserver = null
 
@@ -54,24 +74,8 @@ function handleEmailSubmit() {
   emailSent.value = true
 }
 
-function buildContours() {
-  const svg = contoursRef.value
-  if (!svg) return
-  let out = ''
-  for (let i = 0; i < 28; i++) {
-    const base = i * 24 - 90
-    let d = ''
-    for (let x = -20; x <= 820; x += 16) {
-      const y =
-        base +
-        x * 0.22 +
-        40 * Math.sin(x / 120 + i * 0.2) +
-        20 * Math.sin(x / 55 - i * 0.17)
-      d += `${d ? 'L' : 'M'}${x} ${y.toFixed(1)}`
-    }
-    out += `<path d="${d}"/>`
-  }
-  svg.innerHTML = `<g>${out}</g>`
+function selectSlide(idx) {
+  activeSlideIdx.value = idx
 }
 
 function initWordReveal(container) {
@@ -107,12 +111,15 @@ function initWordReveal(container) {
 }
 
 onMounted(() => {
-  buildContours()
-
   const container = rootRef.value
   if (!container) return
 
   initWordReveal(container)
+
+  // Hero Jember landscape rotation
+  slideTimer = window.setInterval(() => {
+    activeSlideIdx.value = (activeSlideIdx.value + 1) % jemberSlides.length
+  }, 5000)
 
   // Ticker rotation
   tickerTimer = window.setInterval(() => {
@@ -165,6 +172,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (slideTimer) window.clearInterval(slideTimer)
   if (tickerTimer) window.clearInterval(tickerTimer)
   if (tickerFadeTimer) window.clearTimeout(tickerFadeTimer)
   if (revealObserver) revealObserver.disconnect()
@@ -186,70 +194,97 @@ onUnmounted(() => {
       </nav>
     </header>
 
-    <!-- 1 · HERO -->
+    <!-- 1 · HERO (OPSI 2 · FULL BANNER JEMBER + 3-COL BENTO) -->
     <main id="top" class="hero" data-bg="#beccdd,#9bb8a3">
-      <section class="card c-peri hero-left" style="--d: 0.05s">
-        <svg
-          id="contours"
-          ref="contoursRef"
-          viewBox="0 0 800 600"
-          preserveAspectRatio="xMidYMid slice"
-          aria-hidden="true"
-        ></svg>
-        <div class="pill" aria-hidden="true">
-          <div class="bars">
-            <span
-              v-for="(bar, idx) in eqBars"
-              :key="idx"
-              :style="{
-                '--h': bar.h,
-                '--t': bar.t,
-                animationDelay: bar.delay,
-              }"
-            ></span>
-          </div>
-          <div class="play">
-            <svg width="22" height="22" viewBox="0 0 24 24">
-              <path d="M8 5.5v13l11-6.5z" fill="#0a0a0a" />
-            </svg>
-          </div>
-          <div class="ticker" :style="{ opacity: tickerVisible ? 1 : 0 }">
-            {{ currentTicker }}
+      <section class="card hero-banner" style="--d: 0.05s">
+        <img
+          v-for="(slide, idx) in jemberSlides"
+          :key="slide.id"
+          class="hero-slide"
+          :class="{ 'is-active': idx === activeSlideIdx }"
+          :src="slide.src"
+          :alt="slide.alt"
+        />
+        <div class="hero-scrim" aria-hidden="true"></div>
+
+        <div class="hero-top">
+          <span class="hero-badge">✦ BUMDes Kabupaten Jember</span>
+          <div class="jember-chips" role="tablist" aria-label="Lanskap Kabupaten Jember">
+            <button
+              v-for="(slide, idx) in jemberSlides"
+              :key="slide.id"
+              type="button"
+              class="jember-chip"
+              :class="{ 'is-active': idx === activeSlideIdx }"
+              @click="selectSlide(idx)"
+            >
+              {{ slide.label }}
+            </button>
           </div>
         </div>
 
-        <h1 data-reveal>
-          Satu sistem untuk
-          <span class="hl">
-            semua
-            <svg viewBox="0 0 120 50" preserveAspectRatio="none">
-              <path
-                class="draw"
-                pathLength="1"
-                d="M10 28C8 10 40 4 68 5c32 1 50 9 46 23-4 14-36 19-62 18C26 45 6 38 12 22 16 12 30 8 44 6"
-              />
-            </svg>
-          </span>
-          unit usaha desa
-        </h1>
-
-        <a class="btn-white" href="#keunggulan">
-          Lihat keunggulan
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.2"
-          >
-            <path d="M7 17 17 7M8 7h9v9" />
-          </svg>
-        </a>
+        <div class="hero-copy">
+          <h1 data-reveal>
+            Satu sistem untuk
+            <span class="hl">
+              semua
+              <svg viewBox="0 0 120 50" preserveAspectRatio="none">
+                <path
+                  class="draw"
+                  pathLength="1"
+                  d="M10 28C8 10 40 4 68 5c32 1 50 9 46 23-4 14-36 19-62 18C26 45 6 38 12 22 16 12 30 8 44 6"
+                />
+              </svg>
+            </span>
+            unit usaha desa
+          </h1>
+          <p class="hero-sub">
+            {{ activeSlide.caption }} — kelola air bersih dusun, sampah desa, dan
+            sewa alsintan secara terintegrasi.
+          </p>
+          <div class="hero-actions">
+            <a class="btn-white" href="#keunggulan">
+              Lihat keunggulan
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+              >
+                <path d="M7 17 17 7M8 7h9v9" />
+              </svg>
+            </a>
+            <button
+              type="button"
+              class="btn-black"
+              @click="goToWorkspace()"
+            >
+              Buka Dashboard
+            </button>
+          </div>
+        </div>
       </section>
 
-      <div class="hero-right">
-        <section class="card c-lime lime-card" style="--d: 0.18s">
+      <div class="hero-bento">
+        <section class="card c-peri unit-mini" style="--d: 0.14s">
+          <span class="tag bg-white/60">3 Unit Usaha</span>
+          <div>
+            <h3>Air bersih, sampah, dan alsintan dalam satu data</h3>
+            <div class="unit-pills mt-3">
+              <span>AIR · m³</span>
+              <span>SAMPAH · bulan</span>
+              <span>ALSINTAN · jam</span>
+            </div>
+          </div>
+          <div class="live-ticker-pill" :style="{ opacity: tickerVisible ? 1 : 0 }">
+            <i></i>
+            <span>{{ currentTicker }}</span>
+          </div>
+        </section>
+
+        <section class="card c-lime lime-card" style="--d: 0.2s">
           <span class="tag">Kasir real-time</span>
           <h3>Catat pemakaian, tagihan terbit otomatis</h3>
           <div class="rail">
@@ -340,7 +375,8 @@ onUnmounted(() => {
           </a>
         </section>
 
-        <section class="card c-forest green-card" style="--d: 0.3s">
+        <section class="card c-forest green-card" style="--d: 0.26s">
+          <span class="tag bg-lime text-ink self-start">Arsitektur</span>
           <p>
             Tiap pencatatan dikirim lewat RabbitMQ, dihitung otomatis, dan tidak
             pernah tertagih dua kali.
@@ -394,41 +430,35 @@ onUnmounted(() => {
           </p>
         </article>
 
-        <article class="card b-b" style="--d: 0.08s" aria-hidden="true">
-          <svg viewBox="0 0 200 220" preserveAspectRatio="xMidYMid slice">
-            <path
-              d="M-10 230C20 120 80 40 210 -10c10 90-30 190-120 230z"
-              fill="rgba(255,255,255,.12)"
-            />
-            <path
-              d="M20 230C60 140 110 70 200 10"
-              stroke="rgba(255,255,255,.7)"
-              stroke-width="2.2"
-              fill="none"
-              stroke-linecap="round"
-            />
-            <g
-              stroke="rgba(255,255,255,.45)"
-              stroke-width="1.2"
-              fill="none"
-              stroke-linecap="round"
-            >
-              <path
-                d="M44 190c14-4 26-12 34-24M62 160c14-2 26-10 34-22M82 132c12-2 22-8 30-18M104 108c10-2 20-8 26-16M30 200c8 2 20 0 30-6M52 176c4 10 12 18 22 22M72 146c4 8 10 16 20 20M94 122c4 8 8 14 16 18"
-              />
-            </g>
-          </svg>
+        <article class="card b-b" style="--d: 0.08s">
+          <span class="argopuro-cap">Pantai Papuma · Jember</span>
         </article>
 
-        <article class="card c-peri b-c" style="--d: 0.14s">
-          <svg class="line-ico" viewBox="0 0 120 80">
-            <path d="M6 70C34 60 62 42 108 12" />
-            <path
-              d="M40 52c-2-12 4-22 16-26 2 12-4 22-16 26zM62 38c0-12 8-20 20-22-1 12-8 20-20 22zM28 60c-8-8-10-18-6-28 10 4 14 14 6 28zM86 22c2-10 10-16 20-16-1 10-8 16-20 16z"
-            />
-          </svg>
-          Perlu laporan konsolidasi tiap unit? Datanya sudah terkumpul dan
-          terhitung, tinggal dibaca.
+        <article class="card b-c" style="--d: 0.14s">
+          <div class="mini-report" aria-hidden="true">
+            <div class="mini-report-hd">
+              <span>Konsolidasi Unit</span>
+              <em>Rp 4,2 jt</em>
+            </div>
+            <div class="mini-report-bars">
+              <div>
+                <span style="--h: 82%; background: var(--air)"></span>
+                <small>AIR</small>
+              </div>
+              <div>
+                <span style="--h: 54%; background: var(--sampah)"></span>
+                <small>SAMPAH</small>
+              </div>
+              <div>
+                <span style="--h: 68%; background: var(--alsintan)"></span>
+                <small>ALSINTAN</small>
+              </div>
+            </div>
+          </div>
+          <span>
+            Perlu laporan konsolidasi tiap unit? Datanya sudah terkumpul dan
+            terhitung, tinggal dibaca Kepala Desa.
+          </span>
         </article>
 
         <article class="card c-lime b-d" style="--d: 0.2s">
@@ -443,13 +473,13 @@ onUnmounted(() => {
 
         <article class="card c-white b-e" style="--d: 0.26s">
           <div class="chips">
-            <span class="chip">event_id unik</span>
-            <span class="chip">SELECT … FOR UPDATE</span>
-            <span class="chip">manual ack</span>
-            <span class="chip">prefetch 1</span>
-            <span class="chip">409 jika lunas ganda</span>
+            <span class="chip">Anti tagihan ganda</span>
+            <span class="chip">Kasir aman &amp; cepat</span>
+            <span class="chip">Laporan real-time</span>
+            <span class="chip">Tercatat otomatis</span>
+            <span class="chip">Siap diaudit desa</span>
           </div>
-          <span>Tahan duplikat dan tabrakan kasir</span>
+          <span>Bebas catat ulang dan salah hitung</span>
         </article>
       </div>
     </section>
@@ -461,8 +491,8 @@ onUnmounted(() => {
       <div class="duo">
         <article class="card c-forest" style="--d: 0s">
           <p>
-            Layanan unit hanya mencatat dan mengirim event. Layanan keuangan
-            menghitung di belakang layar, jadi form tetap terasa cepat.
+            Layanan unit hanya mencatat dan mengirim event ke RabbitMQ. Layanan
+            keuangan menghitung di belakang layar, jadi form tetap terasa cepat.
           </p>
           <a class="btn-white" href="#alur">
             Lihat alur event
@@ -478,47 +508,41 @@ onUnmounted(() => {
             </svg>
           </a>
         </article>
-        <article class="card sky" style="--d: 0.12s" aria-hidden="true">
-          <span
-            class="cloud"
-            style="width: 230px; height: 110px; left: -40px; bottom: 30px"
-          ></span>
-          <span
-            class="cloud"
-            style="
-              width: 300px;
-              height: 150px;
-              right: -60px;
-              bottom: -20px;
-              animation-delay: -3s;
-            "
-          ></span>
-          <span
-            class="cloud"
-            style="
-              width: 160px;
-              height: 70px;
-              left: 30%;
-              top: 14%;
-              animation-delay: -5s;
-            "
-          ></span>
-          <div class="float-label">
-            <span>Event terkirim<br />dan terverifikasi</span>
+        <article class="card arch-diagram" style="--d: 0.12s">
+          <span class="tag bg-white/80 self-start">Alur Terdistribusi</span>
+          <div class="arch-nodes">
+            <div class="arch-node">
+              <small>1 · Unit Service</small>
+              <b>Catat Pemakaian</b>
+              <span>Air, sampah, dan alsintan</span>
+            </div>
+            <div class="arch-node is-broker">
+              <small>2 · RabbitMQ</small>
+              <b>Antrean Event</b>
+              <span>Kirim cepat tanpa blokir</span>
+            </div>
+            <div class="arch-node is-finance">
+              <small>3 · Finance</small>
+              <b>Tagihan &amp; Kasir</b>
+              <span>Hitung &amp; kunci lunas</span>
+            </div>
+          </div>
+          <div class="arch-status">
             <i>
               <svg
-                width="16"
-                height="16"
+                width="13"
+                height="13"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="#fff"
-                stroke-width="2.2"
+                stroke-width="2.4"
                 stroke-linecap="round"
                 stroke-linejoin="round"
               >
                 <path d="m5 12 4.5 4.5L19 7" />
               </svg>
             </i>
+            <span>Layanan unit &amp; keuangan terhubung otomatis tanpa antre</span>
           </div>
         </article>
       </div>
@@ -565,8 +589,8 @@ onUnmounted(() => {
             1 / langkah
           </div>
           <p>
-            Petugas unit mencatat pemakaian air, sampah, atau sewa alsintan
-            lewat satu form.
+            Petugas BUMDes mencatat pemakaian air bersih dusun, pengelolaan
+            sampah desa, atau sewa alsintan pertanian lewat satu form.
           </p>
         </article>
 
@@ -590,8 +614,8 @@ onUnmounted(() => {
             2 / langkah
           </div>
           <p>
-            Event <code>usage.recorded</code> dikirim ke RabbitMQ tanpa menunggu
-            hitungan selesai.
+            Catatan pemakaian langsung dikirim ke antrean sistem tanpa membuat
+            petugas menunggu proses hitung.
           </p>
         </article>
 
@@ -615,8 +639,8 @@ onUnmounted(() => {
             3 / langkah
           </div>
           <p>
-            Billing worker memeriksa <code>event_id</code>, menghitung total,
-            lalu menerbitkan tagihan.
+            Sistem keuangan menghitung total tarif × pemakaian secara otomatis
+            dan menerbitkan tagihan tanpa duplikasi.
           </p>
         </article>
 
@@ -641,8 +665,8 @@ onUnmounted(() => {
             4 / langkah
           </div>
           <p>
-            Kasir melunasi dengan kunci basis data, dan dashboard kepala desa
-            langsung ikut berubah.
+            Kasir menerima pelunasan dengan aman, dan laporan Kepala Desa
+            langsung terbarui saat itu juga.
           </p>
         </article>
       </div>
@@ -781,30 +805,30 @@ onUnmounted(() => {
     <!-- 5 · UNIT USAHA -->
     <section class="sec" id="unit-usaha" data-bg="#e8efe6,#dfe6ee">
       <span class="tag">5 / Unit usaha</span>
-      <h2 class="h2" data-reveal>Banyak unit, satu cara mengelolanya</h2>
+      <h2 class="h2" data-reveal>Unit usaha agraris BUMDes dalam satu sistem</h2>
       <div class="tiles rv">
-        <div class="tile t1" style="--d: 0s">
-          Air Bersih<small>satuan: m³</small>
+        <div class="tile has-photo t1" style="--d: 0s">
+          Air Bersih Dusun<small>AIR · satuan: m³</small>
         </div>
-        <div class="tile t2" style="--d: 0.05s">
-          Sampah<small>satuan: bulan</small>
+        <div class="tile has-photo t2" style="--d: 0.05s">
+          Sampah Desa<small>SAMPAH · satuan: bulan</small>
         </div>
-        <div class="tile t3" style="--d: 0.1s">
-          Sewa Alsintan<small>satuan: jam</small>
+        <div class="tile has-photo t3" style="--d: 0.1s">
+          Sewa Alsintan Pertanian<small>ALSINTAN · satuan: jam</small>
         </div>
         <div class="tile t4" style="--d: 0.15s">
-          3<small>unit usaha</small>
+          3<small>unit BUMDes</small>
         </div>
         <div class="tile t5" style="--d: 0.2s">
           Master data<small>pelanggan dan tarif</small>
         </div>
         <div class="tile t6" style="--d: 0.25s">
           pemakaian × tarif = total<small
-            >dihitung otomatis oleh billing worker</small
+            >tagihan terhitung otomatis</small
           >
         </div>
         <div class="tile t7" style="--d: 0.3s">
-          UTC<small>waktu ISO-8601</small>
+          Real-time<small>pantau kapan saja</small>
         </div>
       </div>
     </section>
@@ -818,12 +842,12 @@ onUnmounted(() => {
         >
         <div class="meta">
           <span>© 2026 SIUDES</span>
+          <span>BUMDes Kabupaten Jember · Universitas Jember</span>
           <span>Proyek Sistem Terdistribusi</span>
-          <span>Universitas Jember</span>
         </div>
       </div>
       <div class="r">
-        <h3>Tinggalkan e-mail, kami kabari perkembangan SIUDES.</h3>
+        <h3>Tinggalkan e-mail untuk info implementasi SIUDES di BUMDes Jember.</h3>
         <form @submit.prevent="handleEmailSubmit">
           <input
             v-model="email"

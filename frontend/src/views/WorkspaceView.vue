@@ -1,31 +1,20 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import RoleSwitcher from '../components/RoleSwitcher.vue'
+import UnitUsagePanel from '../components/UnitUsagePanel.vue'
 import { useNavigation } from '../composables/useNavigation'
 import { useRole } from '../composables/useRole'
 
 const { goToLanding } = useNavigation()
-const { activeRole, activeRoleMeta, roles, setRole } = useRole()
+const { activeRole, activeRoleMeta, setRole } = useRole()
 
-const roleModules = computed(() => {
-  if (activeRole.value === 'ADMIN_UNIT') {
-    return [
-      {
-        title: 'Catat Pemakaian Unit',
-        tag: 'POST /api/unit/usage',
-        tone: 'c-peri',
-        detail:
-          'Input pemakaian AIR (m³), SAMPAH (bulan), dan ALSINTAN (jam) untuk pelanggan PLG-001 s.d. PLG-005.',
-      },
-      {
-        title: 'Master Tarif & Pelanggan',
-        tag: 'GET /api/unit/master',
-        tone: 'c-white',
-        detail:
-          'Daftar tarif aktif unit usaha desa dan data pelanggan terdaftar pada db_siudes_unit.',
-      },
-    ]
-  }
+const workspaceTabs = [
+  { role: 'ADMIN_UNIT', label: 'Input Unit', badge: 'ADMIN_UNIT' },
+  { role: 'KASIR', label: 'Loket Kasir', badge: 'KASIR' },
+  { role: 'KEPALA_DESA', label: 'Dashboard Kepala Desa', badge: 'KEPALA_DESA' },
+]
+
+const placeholderModules = computed(() => {
   if (activeRole.value === 'KASIR') {
     return [
       {
@@ -96,51 +85,70 @@ onMounted(() => {
       </div>
     </header>
 
-    <!-- HEADER WORKSPACE -->
-    <section class="mt-2 grid grid-cols-1 gap-3 md:grid-cols-12">
-      <article class="card c-peri in p-7 md:col-span-8 flex flex-col justify-between gap-6 min-h-[240px]">
+    <!-- TAB NAVIGASI WORKSPACE TERSINKRONISASI DENGAN ROLESWITCHER -->
+    <nav
+      class="mt-1 flex flex-wrap items-center justify-between gap-3 rounded-card bg-white/80 p-2"
+      aria-label="Navigasi Mode Workspace"
+    >
+      <div class="flex flex-wrap items-center gap-1.5">
+        <button
+          v-for="tab in workspaceTabs"
+          :key="tab.role"
+          type="button"
+          class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-medium transition-all"
+          :class="
+            activeRole === tab.role
+              ? 'bg-ink text-white shadow-sm'
+              : 'bg-transparent text-muted hover:bg-frame hover:text-ink'
+          "
+          @click="setRole(tab.role)"
+        >
+          <span>{{ tab.label }}</span>
+          <span
+            class="rounded-full px-2 py-0.5 text-[10px]"
+            :class="
+              activeRole === tab.role
+                ? 'bg-lime text-ink'
+                : 'bg-frame text-muted'
+            "
+          >
+            {{ tab.badge }}
+          </span>
+        </button>
+      </div>
+      <span class="px-2 text-[11px] text-muted">
+        Header aktif: <code>X-User-Role: {{ activeRole }}</code>
+      </span>
+    </nav>
+
+    <!-- HEADER STATUS PERAN -->
+    <section class="mt-3">
+      <article
+        class="card c-peri in p-6 md:p-7 flex flex-col justify-between gap-3"
+      >
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <span class="tag bg-white/70">Peran Aktif · {{ activeRoleMeta.code }}</span>
-          <span class="rounded-full bg-black/10 px-3 py-1 text-xs font-medium">
-            Header: X-User-Role: {{ activeRole }}
+          <span class="tag bg-white/75">Peran Aktif · {{ activeRoleMeta.code }}</span>
+          <span class="text-xs font-medium text-ink/75">
+            {{ activeRoleMeta.endpoints.join(' · ') }}
           </span>
         </div>
         <div>
-          <h1 class="m-0 text-3xl font-medium tracking-tight md:text-4xl">
+          <h1 class="m-0 text-2xl font-medium tracking-tight md:text-3xl">
             Workspace {{ activeRoleMeta.label }}
           </h1>
-          <p class="mt-2 max-w-2xl text-sm leading-relaxed text-ink/80 md:text-base">
+          <p class="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink/80">
             {{ activeRoleMeta.description }}
           </p>
         </div>
       </article>
-
-      <article class="card c-lime in p-6 md:col-span-4 flex flex-col justify-between gap-4 min-h-[240px]">
-        <span class="tag bg-white/50">Ganti Peran Cepat</span>
-        <div class="flex flex-col gap-2">
-          <button
-            v-for="r in roles"
-            :key="r.code"
-            type="button"
-            class="flex items-center justify-between rounded-2xl px-3.5 py-2.5 text-left text-xs font-medium transition-all"
-            :class="
-              activeRole === r.code
-                ? 'bg-ink text-white'
-                : 'bg-white/75 text-ink hover:bg-white'
-            "
-            @click="setRole(r.code)"
-          >
-            <span>{{ r.label }}</span>
-            <span class="opacity-75">{{ r.code }}</span>
-          </button>
-        </div>
-      </article>
     </section>
 
-    <!-- MODUL PLACEHOLDER SESUAI PERAN -->
-    <section class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+    <!-- KONTEN SESUAI PERAN AKTIF -->
+    <UnitUsagePanel v-if="activeRole === 'ADMIN_UNIT'" />
+
+    <section v-else class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
       <article
-        v-for="mod in roleModules"
+        v-for="mod in placeholderModules"
         :key="mod.title"
         class="card in p-7 flex flex-col justify-between gap-6 min-h-[220px]"
         :class="mod.tone"
@@ -157,7 +165,9 @@ onMounted(() => {
     </section>
 
     <!-- FOOTER MINI -->
-    <footer class="mt-4 flex flex-wrap items-center justify-between gap-3 px-3.5 py-4 text-xs text-muted">
+    <footer
+      class="mt-4 flex flex-wrap items-center justify-between gap-3 px-3.5 py-4 text-xs text-muted"
+    >
       <span>SIUDES · Design System Bento Grid (Albert Sans)</span>
       <span>Peran tersimpan di localStorage (<code>siudes_active_role</code>)</span>
     </footer>
