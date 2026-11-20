@@ -11,7 +11,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import pika
 from pika.exceptions import AMQPConnectionError, ChannelClosedByBroker, StreamLostError
 from pydantic import ValidationError
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.orm import sessionmaker
@@ -30,6 +30,7 @@ EXCHANGE_NAME = "siudes.events"
 EXCHANGE_TYPE = "topic"
 QUEUE_NAME = "finance.billing.queue"
 ROUTING_KEY = "usage.recorded"
+INVOICE_EVENTS_CHANNEL = "siudes_invoice_events"
 TWO_PLACES = Decimal("0.01")
 
 running = True
@@ -138,6 +139,12 @@ def _process_message(ch, method, properties, body: bytes) -> None:
         session.commit()
 
         if result.rowcount and result.rowcount > 0:
+            notify_payload = json.dumps({"invoice_code": invoice_code, "status": "UNPAID"})
+            session.execute(
+                text("SELECT pg_notify(:channel, :payload)"),
+                {"channel": INVOICE_EVENTS_CHANNEL, "payload": notify_payload},
+            )
+            session.commit()
             logger.info(
                 "Created invoice %s for event_id=%s (customer=%s, unit=%s, total=%s)",
                 invoice_code,

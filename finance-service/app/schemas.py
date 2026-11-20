@@ -35,6 +35,14 @@ class InvoiceOut(BaseModel):
     paid_at: datetime | None = None
 
 
+class PayInvoiceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    invoice_code: str
+    status: str
+    paid_at: datetime
+
+
 class UnitSummaryOut(BaseModel):
     paid: Decimal
     unpaid: Decimal

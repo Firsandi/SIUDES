@@ -20,6 +20,13 @@ def _build_database_url() -> str:
 
 DATABASE_URL = _build_database_url()
 
+
+def get_asyncpg_dsn() -> str:
+    """Return a plain postgresql:// DSN for direct asyncpg connections (e.g. LISTEN/NOTIFY)."""
+    if DATABASE_URL.startswith("postgresql+asyncpg://"):
+        return DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://", 1)
+    return DATABASE_URL
+
 engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 
 AsyncSessionLocal = async_sessionmaker(

@@ -1,18 +1,24 @@
+import asyncio
+import json
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from decimal import Decimal
 
+import asyncpg
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sse_starlette.sse import EventSourceResponse
 
-from app.auth import require_roles
-from app.database import get_db, init_db
-from app.models import Invoice
-from app.schemas import ApiResponse, InvoiceOut, SummaryOut, UnitSummaryOut
+from app.auth import require_roles, require_roles_header_or_query
+from app.database import get_asyncpg_dsn, get_db, init_db
+from app.models import Invoice, PaymentLog
+from app.schemas import ApiResponse, InvoiceOut, PayInvoiceOut, SummaryOut, UnitSummaryOut
 
 ZERO_AMOUNT = Decimal("0.00")
+INVOICE_EVENTS_CHANNEL = "siudes_invoice_events"
 
 
 @asynccontextmanager
@@ -124,3 +130,97 @@ async def get_summary(
         },
     )
     return ApiResponse(success=True, data=summary, error=None)
+
+
+@app.post("/api/finance/invoices/{invoice_code}/pay", response_model=ApiResponse[PayInvoiceOut])
+async def pay_invoice(
+    invoice_code: str,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_roles("KASIR")),
+):
+    stmt = select(Invoice).where(Invoice.invoice_code == invoice_code).with_for_update()
+    result = await db.execute(stmt)
+    invoice = result.scalar_one_or_none()
+
+    if invoice is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "NOT_FOUND", "message": "Tagihan tidak ditemukan"},
+        )
+
+    if invoice.status == "PAID":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "ALREADY_PAID", "message": "Tagihan sudah lunas"},
+        )
+
+    now = datetime.now(timezone.utc)
+    invoice.status = "PAID"
+    invoice.paid_at = now
+
+    payment_log = PaymentLog(
+        invoice_id=invoice.id,
+        paid_by_role=role,
+        amount_paid=invoice.total_amount,
+        paid_at=now,
+    )
+    db.add(payment_log)
+    await db.commit()
+
+    notify_payload = json.dumps({"invoice_code": invoice.invoice_code, "status": "PAID"})
+    await db.execute(
+        text("SELECT pg_notify(:channel, :payload)"),
+        {"channel": INVOICE_EVENTS_CHANNEL, "payload": notify_payload},
+    )
+    await db.commit()
+
+    return ApiResponse(
+        success=True,
+        data=PayInvoiceOut.model_validate(invoice),
+        error=None,
+    )
+
+
+@app.get("/api/finance/stream")
+async def stream_invoice_events(
+    request: Request,
+    _role: str = Depends(require_roles_header_or_query("KASIR", "KEPALA_DESA")),
+):
+    conn = await asyncpg.connect(get_asyncpg_dsn())
+    queue: asyncio.Queue[str] = asyncio.Queue()
+
+    def _on_notify(_conn, _pid: int, _channel: str, payload: str) -> None:
+        queue.put_nowait(payload)
+
+    await conn.add_listener(INVOICE_EVENTS_CHANNEL, _on_notify)
+
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    raw_payload = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    continue
+
+                parsed = json.loads(raw_payload)
+                sse_data = json.dumps(
+                    {
+                        "success": True,
+                        "data": {
+                            "invoice_code": parsed["invoice_code"],
+                            "status": parsed["status"],
+                        },
+                        "error": None,
+                    }
+                )
+                yield {"event": "invoice_updated", "data": sse_data}
+        finally:
+            try:
+                await conn.remove_listener(INVOICE_EVENTS_CHANNEL, _on_notify)
+            except Exception:
+                pass
+            await conn.close()
+
+    return EventSourceResponse(event_generator(), ping=15)
